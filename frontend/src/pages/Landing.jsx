@@ -12,9 +12,17 @@ export default function Landing() {
   const [stats, setStats] = useState({ open_leads: 0, quotes_sent: 0, verified_pros: 0, matches_made: 0 });
 
   useEffect(() => {
-    api.get("/service-types", { params: { category: "house-cleaning" } }).then(({ data }) => setTypes(data));
-    api.get("/categories").then(({ data }) => setCategories(data));
-    api.get("/stats").then(({ data }) => setStats(data));
+    api.get("/service-types", { params: { category: "house-cleaning" } })
+      .then(({ data }) => setTypes(Array.isArray(data) ? data : []))
+      .catch((err) => console.error("Error fetching service types:", err));
+
+    api.get("/categories")
+      .then(({ data }) => setCategories(Array.isArray(data) ? data : []))
+      .catch((err) => console.error("Error fetching categories:", err));
+
+    api.get("/stats")
+      .then(({ data }) => setStats(data || { open_leads: 0, quotes_sent: 0, verified_pros: 0, matches_made: 0 }))
+      .catch((err) => console.error("Error fetching stats:", err));
   }, []);
 
   return (
@@ -50,10 +58,10 @@ export default function Landing() {
 
             <div className="mt-14 grid max-w-2xl grid-cols-2 gap-6 border-t border-border pt-8 sm:grid-cols-4">
               {[
-                ["open-leads", stats.open_leads, "Open requests"],
-                ["quotes-sent", stats.quotes_sent, "Quotes sent"],
-                ["verified-pros", stats.verified_pros, "Verified pros"],
-                ["matches", stats.matches_made, "Matches made"],
+                ["open-leads", stats?.open_leads || 0, "Open requests"],
+                ["quotes-sent", stats?.quotes_sent || 0, "Quotes sent"],
+                ["verified-pros", stats?.verified_pros || 0, "Verified pros"],
+                ["matches", stats?.matches_made || 0, "Matches made"],
               ].map(([id, value, label]) => (
                 <div key={id} data-testid={`stat-${id}`}>
                   <div className="display text-3xl font-extrabold mint-text sm:text-4xl">{value}</div>
@@ -92,13 +100,13 @@ export default function Landing() {
             Starting with House Cleaning.
           </h2>
           <div className="mt-12 grid gap-6 md:grid-cols-3">
-            {categories.map((c, i) => {
-              const Icon = ICONS[c.icon] || Sparkles;
-              const live = c.status === "live";
+            {Array.isArray(categories) && categories.map((c, i) => {
+              const Icon = ICONS[c?.icon] || Sparkles;
+              const live = c?.status === "live";
               return (
                 <div
-                  key={c.slug}
-                  data-testid={`category-card-${c.slug}`}
+                  key={c?.slug || i}
+                  data-testid={`category-card-${c?.slug}`}
                   className={`card-lift rise glass rounded-2xl p-7 ${live ? "" : "opacity-70"}`}
                   style={{ animationDelay: `${i * 90}ms` }}
                 >
@@ -112,12 +120,12 @@ export default function Landing() {
                       {live ? "Live" : "Soon"}
                     </span>
                   </div>
-                  <h3 className="mt-6 text-xl font-bold">{c.name}</h3>
-                  <p className="mt-3 text-sm text-muted-foreground">{c.tagline}</p>
+                  <h3 className="mt-6 text-xl font-bold">{c?.name}</h3>
+                  <p className="mt-3 text-sm text-muted-foreground">{c?.tagline}</p>
                   {live && (
                     <Link
                       to="/post"
-                      data-testid={`category-cta-${c.slug}`}
+                      data-testid={`category-cta-${c?.slug}`}
                       className="mt-6 inline-flex items-center gap-1.5 text-sm font-bold mint-text"
                     >
                       Post a request <ArrowRight size={15} />
@@ -147,25 +155,25 @@ export default function Landing() {
             </Link>
           </div>
           <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {types.map((s, i) => (
+            {Array.isArray(types) && types.map((s, i) => (
               <Link
-                key={s.slug}
-                to={`/post?type=${s.slug}`}
-                data-testid={`type-card-${s.slug}`}
+                key={s?.slug || i}
+                to={`/post?type=${s?.slug}`}
+                data-testid={`type-card-${s?.slug}`}
                 className="card-lift rise glass group overflow-hidden rounded-2xl"
                 style={{ animationDelay: `${i * 80}ms` }}
               >
                 <div className="h-40 overflow-hidden">
                   <img
-                    src={s.image}
-                    alt={s.name}
+                    src={s?.image}
+                    alt={s?.name}
                     className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                   />
                 </div>
                 <div className="p-5">
-                  <h3 className="text-base font-bold">{s.name}</h3>
-                  <p className="mt-2 text-xs text-muted-foreground">{s.typical_duration}</p>
-                  <div className="mt-3 display text-lg font-extrabold mint-text">{s.typical_range}</div>
+                  <h3 className="text-base font-bold">{s?.name}</h3>
+                  <p className="mt-2 text-xs text-muted-foreground">{s?.typical_duration}</p>
+                  <div className="mt-3 display text-lg font-extrabold mint-text">{s?.typical_range}</div>
                   <span className="mt-4 inline-flex items-center gap-1 text-xs font-bold mint-text">
                     Request quotes <ArrowRight size={13} />
                   </span>
