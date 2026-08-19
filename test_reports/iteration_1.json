@@ -1,0 +1,47 @@
+{
+  "summary": "First test run of Donely Platform. 20/24 backend pytest tests pass (83%). All catalog, auth login for the 3 seeded roles, /auth/me, bookings creation, Stripe checkout session creation, admin assign (dispatch_mode admin_override), provider status transitions (assigned->accepted->in_progress->completed), time-saved tracker, and 401/403 role gating pass. Frontend smoke: landing renders with brand/stats/categories, login works for all 3 roles, /admin redirect for providers works, 4-step booking wizard advances through service->date->time->address->confirm, Pay button hits POST /api/bookings + POST /api/payments/checkout and returns a real checkout.stripe.com URL (session cs_test_...). Admin dashboard renders stat tiles, provider pool, and booking rows with reassign selects. Auto-dispatch on paid could not be end-to-end verified without completing a Stripe card flow (marked untested-if-blocked per instructions), but the equivalent admin_override assign flow is verified.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/auth/register", "issue": "Endpoint attaches access_token to response body but response_model=UserOut strips it, so clients receive only user fields. Auth cookies ARE set, but any client relying on the token in the JSON body (frontend Register.jsx passes it to context, and the login endpoint returns it) will not receive one on register. Fix: remove response_model=UserOut or return a dict/dedicated model that includes access_token.", "priority": "HIGH"},
+      {"endpoint": "POST /api/auth/login (brute-force lockout)", "issue": "Lockout is keyed by f'{request.client.host}:{email}'. Behind the K8s ingress the same test client alternates between backend pod IPs (10.208.135.194 / 10.208.135.198), so the counter is split and the 5-strike lockout never triggers - 7 wrong attempts in a row all returned 401, no 429. Fix: derive client IP from X-Forwarded-For header (first hop) OR key the lockout on email only.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "GET /api/admin/providers", "issue": "Response uses response_model=List[Provider] which serializes _id via alias, so items come out with '_id' rather than 'id'. Not incorrect, but inconsistent with e.g. GET /api/bookings which returns plain dicts. Frontend AdminDashboard.jsx likely relies on one shape; make it consistent (recommend BaseDocument model_dump(by_alias=False) or set response_model_by_alias=False)."},
+      {"endpoint": "POST /api/admin/bookings/{id}/assign", "issue": "Only advances status if current status is in (confirmed, assigned, accepted). Pending_payment bookings therefore cannot be manually assigned before payment - the provider stays attached but status stays pending_payment and provider_transitions block accept. Consider allowing manual assign to also move pending_payment->confirmed, or documenting this expectation."},
+      {"endpoint": "GET /api/stats", "issue": "active_pros counts every provider regardless of skills/is_express_reserve. After a few provider registrations from tests, landing shows 8 pros (spec expects 4 seeded). Not incorrect but consider filtering to non-reserve or to skills-matched pros."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Registration -> automatic login", "issue": "Register endpoint response has no access_token (see backend critical). If Register.jsx tries to store token from response body, it will be undefined. Cookie login still works because httpOnly cookie is set, but any Bearer-only client will be logged out until a follow-up /auth/login.", "affected_selectors": ["register-submit-btn"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_donely_backend.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Fix /api/auth/register to include access_token in the response (drop response_model=UserOut or add access_token field).",
+    "Fix brute-force lockout key so it works behind the K8s ingress (use email-only key or X-Forwarded-For).",
+    "Optional: normalize response shape (id vs _id) between /api/admin/providers and /api/bookings.",
+    "Optional: allow admin assign on pending_payment bookings or document that manual assign requires post-payment status."
+  ],
+  "critical_code_review_comments": [
+    "server.py exceeds 670 lines - consider splitting auth, catalog, bookings, admin, payments into separate routers for maintainability.",
+    "auto_dispatch() ignores backup when only one available pro exists; backup can be None even though a Donely Express Reserve exists (because the filter requires str(_id)!=primary._id but the reserve pro is also in `pool`). In current seed data it works, but if the reserve is the only available pro it will not be selected as primary. Consider reserving Express Reserve strictly as backup and pulling from a separate query.",
+    "Password reset / refresh-token rotation endpoints are missing (refresh cookie is set but never consumed).",
+    "STRIPE_WEBHOOK_SECRET defaults to '' - webhook will fail signature check silently. Add startup log warning if empty."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_donely_backend.py"
+  ],
+  "success_rate": {"backend": "83% (20/24 pytest)", "frontend": "100% smoke (landing, login x3, role gating, booking wizard -> Stripe URL, admin dashboard)"},
+  "test_credentials": "customer@donely.com/Customer@123, cleaner@donely.com/Cleaner@123, admin@donely.com/Admin@123 - all verified working.",
+  "seed_data_creation": "Registered a handful of TEST_ customers/providers during tests; they remain in DB. Also created 6-7 unpaid TEST bookings which show up in admin dashboard.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend tests live at /app/backend/tests/test_donely_backend.py. Re-run with `pytest /app/backend/tests/test_donely_backend.py -v`. Register-returns-token and brute-force-lockout failures are real product bugs, not test bugs. Auto-dispatch on paid state was NOT end-to-end verified because Stripe test card checkout was not driven from the browser; _confirm_booking code path is only exercised via the admin_override path here. To retest auto-dispatch, either drive the Stripe checkout in a browser session or add a webhook simulation with a valid signature.",
+  "rca of the issue": "1) /auth/register: FastAPI's response_model=UserOut filters fields not declared in the model, so `out['access_token']=...` is stripped before serialization. Reproduction: `curl -sX POST $URL/api/auth/register -d '{\"email\":\"x@y.z\",\"password\":\"Test@1234\",\"name\":\"a\",\"role\":\"customer\"}' -H 'content-type: application/json'` returns no access_token field. Fix: change signature to `async def register(...) -> dict` (remove response_model) or add access_token to UserOut. 2) Brute-force: MongoDB shows two separate `login_attempts` rows for the same email keyed by different pod IPs (10.208.135.194 and 10.208.135.198), so counter never reaches 5 on either key. Fix: key on email alone or first token of `X-Forwarded-For`."
+}

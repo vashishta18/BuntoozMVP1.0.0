@@ -1,0 +1,47 @@
+{
+  "summary": "Iteration 2 testing complete: all 24 iteration-1 regression tests + 15 new iteration-2 tests pass (39/39, 100%). Backend features verified: server-side Nominatim geocoding on booking creation (returns location{lat,lng} + location_formatted), recurrence validation (400 on invalid), auto-dispatch on paid via _confirm_booking (assigns primary + backup, sets dispatch_mode=auto, emits 'Payment confirmed · auto-dispatch armed' + '<pro> auto-dispatched' timeline events), provider feed (paid+unassigned+in-radius+skill-matched, sorted by distance, excludes declined), one-tap claim (409 on conflict), decline promotes backup (auto_dispatch_active=true, timeline 'Platform Auto-Dispatch Active'), cron auth (401 without/wrong bearer, 200 with WEBHOOK_CRON_SECRET), admin sweep returns {scanned, promoted}, provider check-in adds timeline event, proof-of-work photo required to complete (400 without, non-image 400), ratings only on completed by owning customer (400/403), recurring cleans auto-spawn next visit +7d/+14d with pending_payment status + preferred_provider_id + recurrence_parent_id, duplicate rating rejected. Frontend smoke verified: customer dashboard shows auto-dispatch-banner-{id}, pay-now-btn-{id}, timeline-toggle-{id}, timeline-{id} expansion, rate-btn-{id}, rated-{id}. Provider dashboard tabs (feed/jobs), claim-btn, checkin-btn, upload-photo-btn, photo-input, job-action-btn, decline-btn, job-timer visible. Book wizard recurrence-option-* live on step 2 (schedule), Repeat row on step 4 (confirm). Admin admin-sweep-btn present.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/stats", "issue": "active_pros now filters by skills=house-cleaning but still counts every provider registered by tests (currently 20+). Consider excluding express-reserve pros or capping to seeded ones for the landing marketing number."},
+      {"endpoint": "GET /api/provider/feed", "issue": "Sort only by distance; scheduled_date pre-sort has no effect once python .sort() runs. Consider sorting by (distance, scheduled_date) or documenting current behavior."},
+      {"endpoint": "POST /api/cron/redispatch-sweep", "issue": "Endpoint uses BackgroundTasks correctly (returns immediately) but does not persist the run/log. Cron platform sees success but there's no audit trail of scanned/promoted counts. Consider writing to db.cron_runs."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "AdminDashboard provider assign <select>", "issues": ["Visual-editor tooling injects a <span data-ve-dynamic> inside <option> which triggers a React hydration warning ('span cannot be a child of option'). Not a functional bug but produces console noise; source is the visual editor layer, not the code itself."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_donely_backend.py",
+    "/app/backend/tests/test_donely_iteration2.py",
+    "/app/test_reports/pytest/iter2_full.xml"
+  ],
+  "action_items": [
+    "Optional: filter /api/stats.active_pros to exclude test-registered providers and express reserve for marketing number.",
+    "Optional: persist cron sweep results (scanned/promoted, timestamp) in db.cron_runs for audit.",
+    "Optional (cosmetic): AdminDashboard <option> content wrapping produces a hydration warning in dev — no user-visible impact."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now 1030 lines — split into routers (auth, catalog, bookings, provider, admin, payments, dispatch) before it grows further.",
+    "auto_dispatch(): when preferred_provider_id is set but that provider is busy/declined, code still falls through to best-rated non-reserve — good, but there is no timeline note explaining that the preferred pro was unavailable. Consider surfacing 'Preferred pro busy → best-rated dispatched' event.",
+    "promote_backup(): puts current provider_id into declined_by, so a decline followed by admin re-assign to the same pro will refuse to accept via feed. Document or clear declined_by on admin_override.",
+    "spawn_next_occurrence(): copies the entire booking dict including timeline, then overwrites timeline to just the created event — good. But it also copies the parent's rating/completion_photos fields via {**booking}, then does not reset rating (it does reset completion_photos). Confirm rating is intended to be inherited (spec says pay-per-visit new booking) — likely a bug: child booking would show a stale rating.",
+    "geo.geocode(): no in-memory cache; every booking creation calls Nominatim which is rate-limited (~1req/s). Add an LRU cache keyed on (address_line1, city, postal_code) or store in db.geocode_cache.",
+    "storage.put_object retries once on 404 by re-initializing storage key — good. But no retry on 5xx (Emergent object storage is external). Consider one-shot retry on 502/503."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_donely_backend.py",
+    "/app/backend/tests/test_donely_iteration2.py"
+  ],
+  "success_rate": {"backend": "100% (39/39 pytest)", "frontend": "100% smoke (customer + provider + admin + book wizard testids all present and interactive)"},
+  "test_credentials": "customer@donely.com/Customer@123, cleaner@donely.com/Cleaner@123, admin@donely.com/Admin@123 — all verified. WEBHOOK_CRON_SECRET from /app/backend/.env verified via cron endpoint 200 response.",
+  "seed_data_creation": "Created ~10 TEST_iter2 bookings and 2 TEST_ alt provider/customer users during tests. All bookings prefixed with 'TEST_iter2' in notes. Should be cleaned up by main agent or left as visible-test data.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend test suite lives at /app/backend/tests/{test_donely_backend.py, test_donely_iteration2.py}. Run with `pytest /app/backend/tests/ -v`. All 39 tests pass. If a lockout test fails, clear db.login_attempts collection (mongosh test_database --eval 'db.login_attempts.deleteMany({})'). To exercise _confirm_booking without Stripe UI, tests use a subprocess helper that imports server._confirm_booking and awaits it — see _confirm_booking_internal in test_donely_iteration2.py. Nominatim rate limits ~1req/s, so tests do not create bookings in tight loops. Frontend smoke verified all required data-testid selectors: auto-dispatch-banner-{id}, timeline-toggle-{id}, timeline-{id}, booking-eta-{id}, rate-btn-{id}, rated-{id}, pay-now-btn-{id}, provider-tab-feed/jobs, feed-row-{id}, claim-btn-{id}, checkin-btn-{id}, upload-photo-btn-{id}, photo-input-{id}, job-action-btn-{id}, decline-btn-{id}, job-timer-{id}, recurrence-option-*, admin-sweep-btn.",
+  "rca of the issue": "No blocking issues found. All previously reported iteration-1 bugs (register missing access_token, brute-force lockout keyed on host:email) confirmed fixed — register now returns access_token in body, and login_attempts is keyed on 'login:<email>' so 5 wrong tries lock the email regardless of pod IP."
+}

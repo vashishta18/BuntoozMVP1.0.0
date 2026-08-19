@@ -1,0 +1,48 @@
+version: "3.9"
+
+# Local-first stack: no managed cloud services required.
+# Run everything with:  docker compose up --build
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  backend:
+    image: python:3.11-slim
+    working_dir: /app/backend
+    depends_on:
+      - mongo
+    environment:
+      MONGO_URL: mongodb://mongo:27017
+      DB_NAME: buntooz
+      CORS_ORIGINS: "*"
+      JWT_SECRET: local-dev-secret-change-me
+      ADMIN_EMAIL: admin@buntooz.com
+      ADMIN_PASSWORD: Admin@123
+      UPLOAD_DIR: uploads
+    volumes:
+      - ./backend:/app/backend
+    command: bash -lc "pip install -r requirements.txt && uvicorn server:app --host 0.0.0.0 --port 8001 --reload"
+    ports:
+      - "8001:8001"
+
+  frontend:
+    image: node:20-alpine
+    working_dir: /app/frontend
+    depends_on:
+      - backend
+    environment:
+      REACT_APP_BACKEND_URL: http://localhost:8001
+      WDS_SOCKET_PORT: "3000"
+    volumes:
+      - ./frontend:/app/frontend
+    command: sh -lc "yarn install && yarn start"
+    ports:
+      - "3000:3000"
+
+volumes:
+  mongo_data:
