@@ -786,7 +786,7 @@ async def seed() -> None:
                 "user_id": uid, "name": u["name"], "email": u["email"], "phone": u.get("phone"),
                 "skills": ["house-cleaning"], **SEED_PROVIDER_PROFILE},
                 "$setOnInsert": {"quotes_sent": 0, "leads_won": 0, "created_at": now_iso()}},
-                upsert=True)
+                                          upsert=True)
     logger.info("seed complete")
 
 
@@ -800,11 +800,20 @@ async def on_shutdown():
     client.close()
 
 
+# ---------------------------------------------------------------- app setup
+
+# 1. Include the API router exactly once
 app.include_router(api)
+
+# 2. Add CORS Middleware exactly once
+# Using a regex allows Vercel preview branch URLs while strictly supporting cookies/credentials
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=".*",
+    allow_origin_regex=r"https://.*\.vercel\.app",
+    # allow_origins=["http://localhost:3000"], # Uncomment this line when testing your frontend locally
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Exposed 'app' is ready for Vercel

@@ -1,0 +1,26 @@
+{
+  "services": {
+    "web": {
+      "root": "frontend/"
+    },
+    "api": {
+      "root": "backend/",
+      "entrypoint": "server.py"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": {
+        "service": "api",
+        "path": "/api/:path*"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "web"
+      }
+    }
+  ]
+}
