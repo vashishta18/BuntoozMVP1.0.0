@@ -4,7 +4,8 @@
       "root": "frontend/"
     },
     "api": {
-      "root": "backend/"
+      "root": "backend/",
+      "entrypoint": "server.py"
     }
   },
   "rewrites": [
