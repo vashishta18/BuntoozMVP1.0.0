@@ -1,18 +1,20 @@
 {
-  "builds": [
-    {
-      "src": "server.py",
-      "use": "@vercel/python"
+  "services": {
+    "web": {
+      "root": "frontend/"
+    },
+    "api": {
+      "root": "backend/"
     }
-  ],
-  "routes": [
+  },
+  "rewrites": [
     {
-      "src": "/api/(.*)",
-      "dest": "server.py"
+      "source": "/api/:path*",
+      "destination": "api"
     },
     {
-      "src": "/(.*)",
-      "dest": "server.py"
+      "source": "/(.*)",
+      "destination": "web"
     }
   ]
 }
