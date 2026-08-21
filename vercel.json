@@ -10,11 +10,15 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "api"
+      "destination": {
+        "service": "api"
+      }
     },
     {
       "source": "/(.*)",
-      "destination": "web"
+      "destination": {
+        "service": "web"
+      }
     }
   ]
 }
